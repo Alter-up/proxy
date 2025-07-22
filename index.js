@@ -42,8 +42,8 @@ const inlineScript = `
 </script>
 `;
 
-app.get("/proxy", (req, res) => {
-  const targetUrl = req.query.url;
+app.get("/", (req, res) => {
+  const targetUrl = req.query.id;
   if (!targetUrl) return res.status(400).send("Параметр ?url= обязателен");
 
   let urlObj;
