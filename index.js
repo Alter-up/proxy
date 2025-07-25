@@ -138,16 +138,23 @@ app.get("/", (req, res) => {
   proxyHtml(targetUrl, res);
 });
 
-// 📌 Обработка /example.com без редиректа
+// 📌 Обработка /example.com
 app.get("/:host", (req, res) => {
   const host = req.params.host;
+  const targetUrl = `https://${host}/`;
+  proxyHtml(targetUrl, res);
+});
 
-  // Пропуск статики
-  if (/\.(js|css|png|jpg|jpeg|gif|svg|ico|map)$/.test(host)) {
+// 📌 Обработка /example.com/любая/глубина/пути
+app.get("/:host/*", (req, res) => {
+  const host = req.params.host;
+  const restPath = req.params[0]; // путь после хоста
+
+  if (/\.(js|css|png|jpg|jpeg|gif|svg|ico|map)$/.test(restPath)) {
     return res.status(404).send("Not found");
   }
 
-  const targetUrl = `https://${host}/`;
+  const targetUrl = `https://${host}/${restPath}`;
   proxyHtml(targetUrl, res);
 });
 
