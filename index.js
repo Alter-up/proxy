@@ -82,8 +82,13 @@ app.use("/proxy", (req, res) => {
 
 // Проксируем HTML с модификацией
 app.get("/", (req, res) => {
-  const targetUrl = req.query.id;
+  let targetUrl = req.query.id;
   if (!targetUrl) return res.status(400).send("Параметр ?id= обязателен");
+
+  // Добавляем https:// если пользователь указал просто домен
+  if (!/^https?:\/\//i.test(targetUrl)) {
+    targetUrl = "https://" + targetUrl;
+  }
 
   let urlObj;
   try {
