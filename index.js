@@ -9,6 +9,15 @@ const PORT = process.env.PORT || 3000;
 
 // Простое кеш-хранилище для статики
 const staticCache = new Map();
+const MAX_CACHE_SIZE = 100; // Ограничение размера кэша
+
+// Добавляем заголовки CORS
+app.use((req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  next();
+});
 
 // Раздаём inject.js
 app.get("/inject.js", (req, res) => {
@@ -43,7 +52,8 @@ const inlineScript = `
   function runWhenReady() {
     try {
       addClassesToElements();
-      setInterval(addClassesToElements, 300);
+      // Увеличиваем интервал до 1000 мс для снижения нагрузки
+      setInterval(addClassesToElements, 1000);
     } catch (err) {
       console.error("Ошибка в runWhenReady:", err);
     }
@@ -65,6 +75,7 @@ app.use("/proxy", (req, res) => {
   try {
     targetUrl = new URL(req.originalUrl.replace("/proxy", ""), targetBase).toString();
   } catch (err) {
+    console.error("Некорректный URL:", err);
     return res.status(400).send("Некорректный URL: " + err.message);
   }
 
@@ -77,7 +88,7 @@ app.use("/proxy", (req, res) => {
     return res.end(cached.body);
   }
 
-  protocol.get(targetUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (proxyRes) => {
+  protocol.get(targetUrl, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' } }, (proxyRes) => {
     let chunks = [];
 
     proxyRes.on("data", (chunk) => chunks.push(chunk));
@@ -93,8 +104,7 @@ app.use("/proxy", (req, res) => {
             console.error("Ошибка декомпрессии gzip:", err);
             return res.status(500).send("Ошибка декомпрессии");
           }
-          buffer = decoded;
-          handleResponse(buffer, contentType);
+          handleResponse(decoded, contentType);
         });
       } else if (contentEncoding === "deflate") {
         zlib.inflate(buffer, (err, decoded) => {
@@ -102,8 +112,7 @@ app.use("/proxy", (req, res) => {
             console.error("Ошибка декомпрессии deflate:", err);
             return res.status(500).send("Ошибка декомпрессии");
           }
-          buffer = decoded;
-          handleResponse(buffer, contentType);
+          handleResponse(decoded, contentType);
         });
       } else {
         handleResponse(buffer, contentType);
@@ -112,6 +121,7 @@ app.use("/proxy", (req, res) => {
       function handleResponse(buffer, contentType) {
         // Кешируем только статику
         if (!contentType.includes("text/html")) {
+          if (staticCache.size > MAX_CACHE_SIZE) staticCache.clear();
           staticCache.set(targetUrl, {
             headers: proxyRes.headers,
             body: buffer,
@@ -144,7 +154,7 @@ app.get("/", (req, res) => {
 
   const protocol = urlObj.protocol === "https:" ? https : http;
 
-  protocol.get(targetUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (proxyRes) => {
+  protocol.get(targetUrl, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' } }, (proxyRes) => {
     let body = [];
 
     proxyRes.on("data", (chunk) => body.push(chunk));
