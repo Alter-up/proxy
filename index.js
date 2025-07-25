@@ -6,7 +6,7 @@ const path = require("path");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Простое кеш-хранилище для статики
+// Кеш для статики
 const staticCache = new Map();
 
 // Раздаём inject.js
@@ -14,7 +14,7 @@ app.get("/inject.js", (req, res) => {
   res.sendFile(path.join(__dirname, "inject.js"));
 });
 
-// Скрипт и инлайн-логика
+// Скрипты для вставки
 const injectedScriptTag = `<script charset="UTF-8" type="text/javascript" src="/inject.js"></script>`;
 const inlineScript = `
 <script>
@@ -41,7 +41,7 @@ const inlineScript = `
 </script>
 `;
 
-// Проксируем статику: /proxy/...
+// Проксируем статику через /proxy
 app.use("/proxy", (req, res) => {
   const targetBase = req.query.base;
   if (!targetBase) return res.status(400).send("Параметр ?base= обязателен");
@@ -49,7 +49,6 @@ app.use("/proxy", (req, res) => {
   const targetUrl = new URL(req.originalUrl.replace("/proxy", ""), targetBase).toString();
   const protocol = targetUrl.startsWith("https") ? https : http;
 
-  // Проверка кеша
   if (staticCache.has(targetUrl)) {
     const cached = staticCache.get(targetUrl);
     res.writeHead(200, cached.headers);
@@ -64,7 +63,6 @@ app.use("/proxy", (req, res) => {
       const buffer = Buffer.concat(chunks);
       const contentType = proxyRes.headers["content-type"] || "";
 
-      // Кешируем только статику
       if (!contentType.includes("text/html")) {
         staticCache.set(targetUrl, {
           headers: proxyRes.headers,
@@ -80,16 +78,8 @@ app.use("/proxy", (req, res) => {
   });
 });
 
-// Проксируем HTML с модификацией
-app.get("/", (req, res) => {
-  let targetUrl = req.query.id;
-  if (!targetUrl) return res.status(400).send("Параметр ?id= обязателен");
-
-  // Добавляем https:// если пользователь указал просто домен
-  if (!/^https?:\/\//i.test(targetUrl)) {
-    targetUrl = "https://" + targetUrl;
-  }
-
+// Общая функция проксирования HTML с модификацией
+function proxyHtml(targetUrl, res) {
   let urlObj;
   try {
     urlObj = new URL(targetUrl);
@@ -108,13 +98,11 @@ app.get("/", (req, res) => {
       let responseBody = Buffer.concat(body).toString("utf8");
 
       if (contentType.includes("text/html")) {
-        // Подменяем пути на проксируемые
         responseBody = responseBody
           .replace(/(["'])\/(_next\/[^"']+)/g, `$1/proxy/$2?base=${targetUrl}`)
           .replace(/(["'])\/(assets\/[^"']+)/g, `$1/proxy/$2?base=${targetUrl}`)
           .replace(/(["'])\/(static\/[^"']+)/g, `$1/proxy/$2?base=${targetUrl}`);
 
-        // Вставляем скрипты
         if (responseBody.includes("</head>")) {
           responseBody = responseBody.replace(
             "</head>",
@@ -135,6 +123,32 @@ app.get("/", (req, res) => {
   }).on("error", (err) => {
     res.status(500).send("Ошибка при проксировании: " + err.message);
   });
+}
+
+// 📌 Обработка /?id=https://...
+app.get("/", (req, res) => {
+  let targetUrl = req.query.id;
+  if (!targetUrl) return res.status(400).send("Параметр ?id= обязателен");
+
+  // Автодобавление https:// если не указано
+  if (!/^https?:\/\//i.test(targetUrl)) {
+    targetUrl = "https://" + targetUrl;
+  }
+
+  proxyHtml(targetUrl, res);
+});
+
+// 📌 Обработка /example.com без редиректа
+app.get("/:host", (req, res) => {
+  const host = req.params.host;
+
+  // Пропуск статики
+  if (/\.(js|css|png|jpg|jpeg|gif|svg|ico|map)$/.test(host)) {
+    return res.status(404).send("Not found");
+  }
+
+  const targetUrl = `https://${host}/`;
+  proxyHtml(targetUrl, res);
 });
 
 app.listen(PORT, () => {
