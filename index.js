@@ -99,7 +99,7 @@ function proxyHtml(targetUrl, res) {
 
       if (contentType.includes("text/html")) {
         responseBody = responseBody
-          .replace(/(["'])\/(_next\/[^"']+)/g, `$1/proxy/$2?base=${targetUrl}`)
+          .replace(/(["'])\/(_next\/[^"']+)/g, `$1${urlObj.origin}/$2`)
           .replace(/(["'])\/(assets\/[^"']+)/g, `$1/proxy/$2?base=${targetUrl}`)
           .replace(/(["'])\/(static\/[^"']+)/g, `$1/proxy/$2?base=${targetUrl}`);
 
